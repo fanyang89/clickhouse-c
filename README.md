@@ -158,6 +158,17 @@ CHC_TEST_PORT=19233 ./test.sh client_tcp
 [`tools/capture.py`](tools/capture.py) proxies such a server to record replay
 fixtures like [test/ch23_3_sparse.bin](test/ch23_3_sparse.bin).
 
+For server-free libFuzzer testing with ASan/UBSan, memory transport mocks,
+allocation-failure injection and round-trip/differential checks:
+
+```sh
+./fuzz.sh
+FUZZ_SECONDS=600 ./fuzz.sh block client
+```
+
+Requires Clang, LZ4 and ZSTD development libraries. See
+[test/fuzz/README.md](test/fuzz/README.md) for target design, limits and crash replay.
+
 ## Non-goals
 
 * HTTP protocol — wrap libcurl directly.
