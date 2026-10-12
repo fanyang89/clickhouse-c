@@ -412,6 +412,48 @@ test_compressed_resume(void)
     }
 }
 
+/* A block-bearing packet cannot end immediately after its leading string.
+ * A truncated compressed frame must not turn into a successful NULL block. */
+static void
+test_truncated_block_packets(void)
+{
+    current_test = "truncated_block_packets";
+    static const chc_packet_kind kinds[] = {
+        CHC_PKT_DATA, CHC_PKT_TOTALS, CHC_PKT_EXTREMES,
+        CHC_PKT_LOG, CHC_PKT_PROFILE_EVENTS,
+    };
+    for (size_t i = 0; i < sizeof kinds / sizeof *kinds; i++) {
+        wbuf b = {};
+        wvar(&b, kinds[i]); wstr(&b, "");
+        expect_packet("missing body", &b, REV_MODERN, CHC_ERR_EOF, kinds[i]);
+    }
+
+    chc_alloc al = chc_alloc_stdlib();
+    chc_codec codec;
+    chc_lz4_codec_init(&codec);
+    uint8_t body[2048];
+    wbuf b = {};
+    size_t body_len = good_body(&al, body, sizeof body);
+    CHECK(body_len > 0);
+    size_t n = compress_packet(&al, body, body_len, false, b.d, sizeof b.d);
+    CHECK(n > 2);
+    for (size_t cut = 2; cut < n; cut++) {
+        b.n = cut;
+        fake f;
+        chc_err err = {};
+        CHECK_OK(fake_up(&f, &al, &b, REV_MODERN, &err), err);
+        f.c.compression = CHC_COMP_LZ4;
+        f.c.codec = &codec;
+        chc_packet pkt = {};
+        CHECK(chc_client_recv_packet(&f.c, &pkt, &err) == CHC_ERR_EOF);
+        CHECK(pkt.block == NULL);
+        chc_packet_clear(&f.c, &pkt);
+        fake_down(&f);
+    }
+out:
+    return;
+}
+
 /* Same stream, one failed allocation at a time: the resume path must unwind
  * its decompressor and partial block on every OOM. */
 static void
@@ -747,6 +789,7 @@ main(void)
     test_recv_packets();
     test_compressed_recv();
     test_compressed_resume();
+    test_truncated_block_packets();
     test_compressed_resume_oom();
     test_async_wrappers();
     test_handshake_revisions();
