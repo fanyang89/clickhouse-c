@@ -710,6 +710,9 @@ chc__recv_block_compressed(chc_client *c, const chc_block_opts *opts,
     rc = chc_block_read(&dec_in, c->al, opts, out, err);
     chc_in_free(&dec_in);
     chc__decomp_src_free(&src);
+    /* Clean EOF is valid for a standalone Native stream, not after Data. */
+    if (rc == CHC_OK && !*out)
+        return chc__err_set(err, CHC_ERR_EOF, "missing compressed block body");
     if (ioless && rc == CHC_WOULD_BLOCK) chc__in_rewind(&c->in);
     return rc;
 }
@@ -918,6 +921,8 @@ chc__recv_packet_resumable(chc_client *c, chc_packet *out, chc_err *err)
             c->recv_next_col = 0;
             return rc;
         }
+        if (!c->recv_partial)
+            return chc__err_set(err, CHC_ERR_EOF, "missing block body");
         out->block = c->recv_partial;
         c->recv_partial = NULL;
         c->recv_next_col = 0;
